@@ -2,7 +2,7 @@
 import moderngl
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from config import DIST_SCALE
+from config import DIST_SCALE, MAX_PARTICLE_TRAIL, MAX_LUNA_TRAIL
 
 class Renderer:
     def __init__(self, ctx):
@@ -12,12 +12,12 @@ class Renderer:
         
         self.vao_circle = self._create_circle_vao()
         
-        # Buffers
+        # Buffers dinámicos según MAX_*
         self.line_vbo = ctx.buffer(reserve=16)
         self.line_vao = ctx.simple_vertex_array(self.prog, self.line_vbo, 'in_pos')
         
-        self.luna_trail_vbo = ctx.buffer(reserve=800 * 2 * 4)
-        self.particle_trail_vbo = ctx.buffer(reserve=300 * 2 * 4)
+        self.luna_trail_vbo = ctx.buffer(reserve=MAX_LUNA_TRAIL * 2 * 4)
+        self.particle_trail_vbo = ctx.buffer(reserve=MAX_PARTICLE_TRAIL * 2 * 4)
 
         self.quad_vao = self._create_text_quad()
 
@@ -89,7 +89,7 @@ class Renderer:
         if self.text_tex:
             self.text_tex.release()
 
-        img = Image.new("RGBA", (860, 270), (0, 0, 0, 170))
+        img = Image.new("RGBA", (860, 280), (0, 0, 0, 170))
         draw = ImageDraw.Draw(img)
         try:
             font = ImageFont.truetype("arial.ttf", 21)
@@ -120,8 +120,10 @@ class Renderer:
     def render_particle_trail(self, trail, cam_pos, zoom):
         if len(trail) < 2:
             return
+        
+        # ← SOLUCIÓN: Escribimos solo hasta el tamaño actual del trail
         data = np.array(trail, dtype='f4').flatten()
-        self.particle_trail_vbo.write(data.tobytes())
+        self.particle_trail_vbo.write(data.tobytes())   # Ahora es seguro porque el buffer es lo suficientemente grande
 
         self.prog['offset'] = (0.0, 0.0)
         self.prog['scale'] = 1.0
