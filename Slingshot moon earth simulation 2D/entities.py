@@ -42,3 +42,13 @@ class Particle:
 
     def is_colliding_moon(self, pos_moon):
         return np.linalg.norm(self.pos - pos_moon) < 2.0e6   # radio aproximado de la Luna + margen
+    
+    # Método nuevo para activar/desactivar y cambiar dirección del thrust
+    def set_thrust(self, ax, ay):
+        """ax, ay en m/s²"""
+        self.thrust = np.array([ax, ay], dtype='f4')
+        self.thrust_active = np.any(self.thrust != 0)
+
+    def stop_thrust(self):
+        self.thrust = np.zeros(2, dtype='f4')
+        self.thrust_active = False

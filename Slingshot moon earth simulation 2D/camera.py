@@ -135,6 +135,36 @@ def setup_callbacks(window, camera, mouse_logic=None, manual_vars=None, utils=No
             if utils and 'reset' in utils:
                 utils['reset']()
 
+        # ==================== CONTROL DE THRUST ====================
+        elif key == glfw.KEY_T:
+            if particles:  # si hay partículas
+                # Tomamos la última partícula lanzada
+                p = particles[-1]
+                p.thrust_active = not p.thrust_active
+                print(f"Thrust {'ACTIVADO' if p.thrust_active else 'DESACTIVADO'} en partícula {len(particles)}")
+            return
+
+        # Control de dirección y potencia del thrust (solo si hay partículas)
+        if particles and particles[-1].thrust_active:
+            p = particles[-1]
+            thrust_mag = 0.5   # m/s² base (podés ajustarlo)
+
+            if key == glfw.KEY_UP:
+                p.set_thrust(0, thrust_mag)
+            elif key == glfw.KEY_DOWN:
+                p.set_thrust(0, -thrust_mag)
+            elif key == glfw.KEY_LEFT:
+                p.set_thrust(-thrust_mag, 0)
+            elif key == glfw.KEY_RIGHT:
+                p.set_thrust(thrust_mag, 0)
+            elif key == glfw.KEY_KP_ADD or key == glfw.KEY_EQUAL:
+                # aumentar potencia
+                p.thrust *= 1.5
+                print(f"Thrust aumentado → {np.linalg.norm(p.thrust):.2f} m/s²")
+            elif key == glfw.KEY_KP_SUBTRACT or key == glfw.KEY_MINUS:
+                p.thrust *= 0.7
+                print(f"Thrust reducido → {np.linalg.norm(p.thrust):.2f} m/s²")
+                
     # ==================== Mouse Callbacks ====================
     def mouse_button_callback(window, button, action, mods):
         if mouse_logic and 'button' in mouse_logic:
