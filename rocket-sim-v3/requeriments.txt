@@ -1,0 +1,19 @@
+tkinter 
+math
+dataclasses
+enum
+typing
+pathlib
+sys
+
+core
+ui
+config
+camera
+coordinates
+rendering
+trajectory
+utils
+
+# No external dependencies.
+# Uses only Python standard library modules.

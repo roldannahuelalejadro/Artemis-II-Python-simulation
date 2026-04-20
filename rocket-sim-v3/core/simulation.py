@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import math
 
-from config.constants import DEFAULT_TIME_STEP_S, EARTH_RADIUS_M
+from config.constants import DEFAULT_TIME_STEP_S, EARTH_RADIUS_M, MOON_ANGULAR_RATE_RAD_S
 from coordinates.frame import FrameType, PolarState, add, magnitude
 from core.entities.celestial import create_earth, create_moon
 from core.phase import MissionPhase
@@ -176,6 +176,35 @@ class SimulationState:
             return "horario"
         return "radial"
 
+    def _snap_to_known_heo_free_return_state(self) -> None:
+        """Glue a launch demo onto the calibrated HEO free-return preset.
+
+        The Artemis toy preset first demonstrates ascent to LEO. Once that
+        visual orbit is complete, this snap restores the exact HEO initial
+        energy used by the already-calibrated toy free-return preset, but keeps
+        the current geocentric angle so the trajectory does not visibly jump to
+        another side of Earth. The Moon is re-phased to preserve the calibrated
+        Moon-spacecraft angular separation from the known setup.
+        """
+        current_theta_rad = math.atan2(self.rocket.position_xy[1], self.rocket.position_xy[0])
+        current_theta_deg = math.degrees(current_theta_rad)
+
+        # The calibrated free-return started with rocket theta=90 deg and Moon
+        # angle=206 deg, so the important lunar phasing is a 116 deg lead.
+        desired_moon_angle_rad = current_theta_rad + math.radians(206.0 - 90.0)
+        self.moon_initial_angle_rad = desired_moon_angle_rad - MOON_ANGULAR_RATE_RAD_S * self.sim_time_s
+        self.moon = create_moon(self.sim_time_s, self.moon_initial_angle_rad)
+        self.place_rocket_on_surface(
+            theta_deg=current_theta_deg,
+            altitude_m=185_000.0,
+            tangential_speed_m_s=10_590.67,
+            radial_speed_m_s=0.0,
+        )
+
+    def _apply_phase_completion_action(self, phase: MissionPhase) -> None:
+        if phase.label == "Pegado a HEO 24h conocida":
+            self._snap_to_known_heo_free_return_state()
+
     def _abort_mission(self, reason: str) -> None:
         self.is_running = False
         self.rocket.active_thrust_xy = (0.0, 0.0)
@@ -226,6 +255,7 @@ class SimulationState:
 
         finished = self.phase_manager.advance(self.dt_s)
         if finished is not None:
+            self._apply_phase_completion_action(finished)
             self.is_running = False
             self.last_completed_phase = finished
             self.rocket.active_thrust_xy = (0.0, 0.0)
