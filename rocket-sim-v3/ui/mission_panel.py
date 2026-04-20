@@ -161,6 +161,70 @@ TOY_FREE_RETURN_PRESET = [
     },
 ]
 
+TOY_FREE_RETURN_RETROGRADE_RETURN_PRESET = [
+    {
+        "label": "HEO 24h checkout",
+        "duration_s": 86_400.0,
+        "frame": FrameType.NONE,
+        "primary_expr": "0.0",
+        "secondary_expr": "0.0",
+    },
+    {
+        "label": "TLI directa",
+        "duration_s": 650.0,
+        "frame": FrameType.PROGRADE,
+        # Stronger than the first toy preset: aim for a higher-energy transfer
+        # ellipse and cap acceleration so the burn remains in the same toy scale.
+        "primary_expr": "max(0,min(9,0.025*(sqrt(mu_earth*(2/r - 1/235000000.0))-speed)+0.25))",
+        "secondary_expr": "0.0",
+    },
+    {
+        "label": "Guiado translunar",
+        "duration_s": 165_000.0,
+        "frame": FrameType.XY,
+        # Far from the Moon, pull gently toward it and damp lunar-relative
+        # transverse velocity. This shapes arrival without a violent correction.
+        "primary_expr": "(0.00045*moon_radial_x - 0.00000028*moon_vrel_t*moon_tangent_x) if moon_dist > 6e7 else 0.0",
+        "secondary_expr": "(0.00045*moon_radial_y - 0.00000028*moon_vrel_t*moon_tangent_y) if moon_dist > 6e7 else 0.0",
+    },
+    {
+        "label": "Paso detras de la Luna",
+        "duration_s": 105_000.0,
+        "frame": FrameType.XY,
+        # Negative behind_score is the desired rear-side geometry. If the craft
+        # is still leading the Moon, push opposite the Moon orbital tangent; add
+        # radial repulsion only for very close approaches to avoid lunar impact.
+        "primary_expr": "((-0.0016*moon_orbit_tangent_x if behind_score > -0.35 else 0.0) + (-0.00000020*moon_vrel_t*moon_tangent_x) + (0.0030*(-moon_radial_x) if moon_dist < 7e6 else 0.0)) if moon_dist < 1.35e8 else 0.0",
+        "secondary_expr": "((-0.0016*moon_orbit_tangent_y if behind_score > -0.35 else 0.0) + (-0.00000020*moon_vrel_t*moon_tangent_y) + (0.0030*(-moon_radial_y) if moon_dist < 7e6 else 0.0)) if moon_dist < 1.35e8 else 0.0",
+    },
+    {
+        "label": "Retorno geocentrico horario",
+        "duration_s": 520_000.0,
+        "frame": FrameType.XY,
+        # Once the craft is leaving the Moon, push in the clockwise Earth
+        # tangent (y/r, -x/r). The small Earthward radial term makes the return
+        # deliberate; the tangential term is what flips hz_earth negative.
+        "primary_expr": "((-0.0060*x/r) + (0.0040*y/r if hz_earth > -6e10 else 0.0)) if (moon_vrel_r < -50 and moon_dist < 2.7e8) or r > 1.6e8 else 0.0",
+        "secondary_expr": "((-0.0060*y/r) + (-0.0040*x/r if hz_earth > -6e10 else 0.0)) if (moon_vrel_r < -50 and moon_dist < 2.7e8) or r > 1.6e8 else 0.0",
+    },
+    {
+        "label": "Afinado periapsis terrestre",
+        "duration_s": 320_000.0,
+        "frame": FrameType.XY,
+        # This is a crude periapsis guard for the toy model. Inbound and too
+        # deep: push outward. Still very high while inbound: bias inward a bit.
+        "primary_expr": "((0.0268*x/r) if (earth_vr < -120 and earth_dist < 3.00e8) else ((-0.0020*x/r) if (earth_dist > 3.20e8) else 0.0))",
+        "secondary_expr": "((0.0268*y/r) if (earth_vr < -120 and earth_dist < 3.00e8) else ((-0.0020*y/r) if (earth_dist > 3.20e8) else 0.0))",
+    },
+    {
+        "label": "Costa final de retorno",
+        "duration_s": 80_000.0,
+        "frame": FrameType.NONE,
+        "primary_expr": "0.0",
+        "secondary_expr": "0.0",
+    },
+]
+
 
 @dataclass(slots=True)
 class MissionPanelState:
@@ -386,6 +450,7 @@ class MissionControlPanel(ttk.Frame):
                 "HEO 24h NASA geometry",
                 "transferencia translunar",
                 "toy free return",
+                "toy free return horario",
             ],
         )
         preset_combo.grid(row=0, column=1, sticky="ew")
@@ -613,7 +678,14 @@ class MissionControlPanel(ttk.Frame):
         if selected == "manual":
             self.log("Preset manual seleccionado. No se cargaron fases.")
             return
-        if selected not in {"orbita 200 km", "HEO 24h checkout", "HEO 24h NASA geometry", "transferencia translunar", "toy free return"}:
+        if selected not in {
+            "orbita 200 km",
+            "HEO 24h checkout",
+            "HEO 24h NASA geometry",
+            "transferencia translunar",
+            "toy free return",
+            "toy free return horario",
+        }:
             self.log(f"Preset no reconocido: {selected}")
             return
 
@@ -627,13 +699,16 @@ class MissionControlPanel(ttk.Frame):
             self.launch_radial_var.set(str(heo["launch_radial_speed_m_s"]))
             self.apply_launch_config(log_message=False)
             preset_items = [heo["phase"]]
-        elif selected in {"transferencia translunar", "toy free return"}:
+        elif selected in {"transferencia translunar", "toy free return", "toy free return horario"}:
             self.launch_altitude_var.set(str(HEO_24H_CHECKOUT["launch_altitude_m"]))
             self.launch_tangential_var.set(str(HEO_24H_CHECKOUT["launch_tangential_speed_m_s"]))
             self.launch_radial_var.set(str(HEO_24H_CHECKOUT["launch_radial_speed_m_s"]))
             if selected == "toy free return":
                 self.moon_angle_var.set("206")
                 preset_items = TOY_FREE_RETURN_PRESET
+            elif selected == "toy free return horario":
+                self.moon_angle_var.set("206")
+                preset_items = TOY_FREE_RETURN_RETROGRADE_RETURN_PRESET
             else:
                 self.moon_angle_var.set("200")
                 preset_items = TRANSLUNAR_TRANSFER_PRESET
@@ -667,6 +742,9 @@ class MissionControlPanel(ttk.Frame):
         if selected == "toy free return":
             self.log("Preset 'toy free return' cargado: HEO 24h + TLI + guiado lunar suave + retorno.")
             self.log("Usa variables lunares: moon_dist, moon_vrel_r/t y behind_score para forzar paso trasero.")
+        elif selected == "toy free return horario":
+            self.log("Preset 'toy free return horario' cargado: TLI directa + paso trasero + retorno geocentrico horario.")
+            self.log("Controla explicitamente hz_earth: positivo al salir, negativo despues del flyby lunar.")
         elif selected == "transferencia translunar":
             self.log("Preset 'transferencia translunar' cargado: arranca directo en HEO 24h, coast y luego TLI.")
             self.log("Angulo lunar inicial sugerido: 200 deg para sobrevuelo seguro; 210 deg impacta la Luna en este modelo.")
@@ -765,6 +843,7 @@ class MissionControlPanel(ttk.Frame):
                     f"Posicion XY: ({snap['rocket_pos'][0]:.1f}, {snap['rocket_pos'][1]:.1f}) m",
                     f"r,theta: ({float(snap['rocket_radius_m']):.1f} m, {float(snap['rocket_theta_deg']):.2f} deg)",
                     f"Velocidad XY: ({snap['rocket_vel'][0]:.2f}, {snap['rocket_vel'][1]:.2f}) m/s | |v|={float(snap['rocket_speed_m_s']):.2f} m/s",
+                    f"hz_earth: {float(snap['hz_earth']):.3e} | sentido geocentrico={snap['geocentric_direction']}",
                     f"Estado orbital: {snap['orbit_state']}",
                     f"Min distancia Luna: {float(snap['min_moon_distance_m'])/1000:.1f} km en t={format_seconds(float(snap['min_moon_distance_time_s']))}",
                     f"Behind score en peri-lunio: {float(snap['min_moon_behind_score']):.3f} (<0 detras, >0 delante)",

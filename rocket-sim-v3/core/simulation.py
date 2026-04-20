@@ -162,6 +162,20 @@ class SimulationState:
         moon_orbit_tangent_y = self.moon.position_xy[0] / 384_400_000.0
         return (rho_x / rho_dist) * moon_orbit_tangent_x + (rho_y / rho_dist) * moon_orbit_tangent_y
 
+    def earth_angular_momentum_z(self) -> float:
+        """Signed Earth-centered angular momentum per unit mass."""
+        x, y = self.rocket.position_xy
+        vx, vy = self.rocket.velocity_xy
+        return x * vy - y * vx
+
+    def geocentric_direction_label(self) -> str:
+        hz = self.earth_angular_momentum_z()
+        if hz > 0.0:
+            return "antihorario"
+        if hz < 0.0:
+            return "horario"
+        return "radial"
+
     def _abort_mission(self, reason: str) -> None:
         self.is_running = False
         self.rocket.active_thrust_xy = (0.0, 0.0)
@@ -255,6 +269,8 @@ class SimulationState:
             "rocket_speed_m_s": self.rocket.speed_m_s,
             "rocket_radius_m": polar.radius_m,
             "rocket_theta_deg": math.degrees(polar.theta_rad),
+            "hz_earth": self.earth_angular_momentum_z(),
+            "geocentric_direction": self.geocentric_direction_label(),
             "moon_pos": self.moon.position_xy,
             "thrust_xy": self.rocket.active_thrust_xy,
             "thrust_mag_m_s2": magnitude(self.rocket.active_thrust_xy),
